@@ -72,6 +72,7 @@ pub enum FocaInput {
 
 #[derive(Debug)]
 pub enum FocaCmd {
+    Announce(Actor, oneshot::Sender<Result<(), foca::Error>>),
     Rejoin(oneshot::Sender<Result<(), foca::Error>>),
     MembershipStates(mpsc::Sender<foca::Member<Actor>>),
     ChangeIdentity(Actor, oneshot::Sender<Result<(), foca::Error>>),

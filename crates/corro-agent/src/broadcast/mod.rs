@@ -259,6 +259,17 @@ pub fn runtime_loop(
                             }
                         }
                         FocaInput::Cmd(cmd) => match cmd {
+                            FocaCmd::Announce(actor, callback) => {
+                                info!("handling FocaCmd::Announce");
+                                info!("announcing actor: {actor:?}");
+                                let r = foca.announce(actor, &mut runtime);
+                                if let Err(e) = &r {
+                                    error!("foca announce error: {e}");
+                                }
+                                if callback.send(r).is_err() {
+                                    warn!("could not send back result after announce");
+                                }
+                            }
                             FocaCmd::Rejoin(callback) => {
                                 let renewed = foca.identity().renew().unwrap();
                                 debug!("handling FocaInput::Rejoin {renewed:?}");
