@@ -322,6 +322,19 @@ async fn process_cli(cli: Cli) -> eyre::Result<()> {
                 );
             }
         }
+        Command::Cluster(ClusterCommand::Join { cluster_id, addr }) => {
+            let addr: SocketAddr = addr.parse()?;
+            let mut conn = AdminConn::connect(cli.admin_path()).await?;
+            conn.send_command(corro_admin::Command::Cluster(
+                corro_admin::ClusterCommand::Join(ClusterId(*cluster_id), addr),
+            )).await?;
+        }
+        Command::Cluster(ClusterCommand::Leave) => {
+            let mut conn = AdminConn::connect(cli.admin_path()).await?;
+            conn.send_command(corro_admin::Command::Cluster(
+                corro_admin::ClusterCommand::Leave,
+            )).await?;
+        }
         Command::Cluster(ClusterCommand::Rejoin) => {
             let mut conn = AdminConn::connect(cli.admin_path()).await?;
             conn.send_command(corro_admin::Command::Cluster(
@@ -340,6 +353,13 @@ async fn process_cli(cli: Cli) -> eyre::Result<()> {
             let mut conn = AdminConn::connect(cli.admin_path()).await?;
             conn.send_command(corro_admin::Command::Cluster(
                 corro_admin::ClusterCommand::MembershipStates,
+            ))
+            .await?;
+        }
+        Command::Cluster(ClusterCommand::GetId) => {
+            let mut conn = AdminConn::connect(cli.admin_path()).await?;
+            conn.send_command(corro_admin::Command::Cluster(
+                corro_admin::ClusterCommand::GetId,
             ))
             .await?;
         }
@@ -692,12 +712,18 @@ enum Command {
 enum ClusterCommand {
     // /// Dumps info about the current actor
     // Actor,
+    /// Join cluster
+    Join { cluster_id: u64, addr: String },
+    /// Leave cluster
+    Leave,
     /// Force a rejoin of the cluster
     Rejoin,
     /// Dumps the current members
     Members,
     /// Dumps the current member SWIM states
     MembershipStates,
+    /// Get cluster ID for the node
+    GetId,
     /// Set a new cluster ID for the node
     SetId { cluster_id: u64 },
 }

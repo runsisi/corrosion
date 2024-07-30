@@ -2,11 +2,11 @@ use std::{
     fmt::Display,
     time::{Duration, Instant},
 };
-
+use std::net::SocketAddr;
 use camino::Utf8PathBuf;
 use corro_types::{
     actor::{ActorId, ClusterId},
-    agent::{Agent, BookedVersions, Bookie, LockKind, LockMeta, LockState},
+    agent::{Agent, BookedVersions, Bookie, LockKind, LockMeta, LockState, FocaState},
     base::{CrsqlDbVersion, CrsqlSeq, Version},
     broadcast::{FocaCmd, FocaInput, Timestamp},
     sqlite::SqlitePoolError,
@@ -106,9 +106,12 @@ pub enum SyncCommand {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClusterCommand {
+    Join(ClusterId, SocketAddr),
+    Leave,
     Rejoin,
     Members,
     MembershipStates,
+    GetId,
     SetId(ClusterId),
 }
 
@@ -350,6 +353,158 @@ async fn handle_conn(
                     }
                     send_success(&mut stream).await;
                 }
+                Command::Cluster(ClusterCommand::Join(cluster_id, addr)) => {
+                    let mut new_cluster = false;
+
+                    let mut cluster_id = cluster_id;
+                    if cluster_id == ClusterId(0) {
+                        // the initial member
+                        new_cluster = true;
+
+                        let ts = agent.clock().new_timestamp().get_time().as_u64();
+                        cluster_id = ClusterId(ts);
+                    }
+
+                    if agent.cluster_id() != cluster_id {
+                        info_log(&mut stream, format!("setting new cluster id: {cluster_id}")).await;
+
+                        let mut conn = match agent.pool().write_priority().await {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                send_error(&mut stream, e).await;
+                                continue;
+                            }
+                        };
+
+                        let res = block_in_place(|| {
+                            let tx = conn.transaction()?;
+
+                            tx.execute("INSERT OR REPLACE INTO __corro_state (key, value) VALUES ('cluster_id', ?)", [cluster_id])?;
+
+                            let (cb_tx, cb_rx) = oneshot::channel();
+
+                            agent
+                                .tx_foca()
+                                .blocking_send(FocaInput::Cmd(FocaCmd::ChangeIdentity(
+                                    agent.actor(cluster_id),
+                                    cb_tx,
+                                )))
+                                .map_err(|_| ProcessingError::Send)?;
+
+                            cb_rx
+                                .blocking_recv()
+                                .map_err(|_| ProcessingError::CallbackRecv)?
+                                .map_err(|e| ProcessingError::String(e.to_string()))?;
+
+                            tx.commit()?;
+
+                            agent.set_cluster_id(cluster_id);
+
+                            Ok::<_, ProcessingError>(())
+                        });
+
+                        if let Err(e) = res {
+                            send_error(&mut stream, e).await;
+                            continue;
+                        }
+                    }
+
+                    if new_cluster {
+                        // initial member does not have to announce
+                        info_log(&mut stream, format!("Created cluster {cluster_id} successfully")).await;
+                        send_success(&mut stream).await;
+                    } else {
+                        let (cb_tx, cb_rx) = oneshot::channel();
+
+                        if let Err(e) = agent
+                            .tx_foca()
+                            .send(FocaInput::Cmd(FocaCmd::Join(addr.into(), cb_tx)))
+                            .await
+                        {
+                            send_error(&mut stream, e).await;
+                            continue;
+                        }
+
+                        if let Err(e) = cb_rx.await {
+                            send_error(&mut stream, e).await;
+                            continue;
+                        }
+
+                        info_log(&mut stream, format!("Announced to join cluster {cluster_id}")).await;
+
+                        let mut rounds = 0;
+
+                        // wait for 50 * 100ms = 5s
+                        for _ in 0..50 {
+                            match agent.foca_state() {
+                                FocaState::Active => {
+                                    info_log(&mut stream, format!("Joined cluster {cluster_id} successfully")).await;
+                                    send_success(&mut stream).await;
+                                    break;
+                                }
+                                _ => {
+                                    rounds += 1;
+                                    if rounds % 10 == 0 {
+                                        info_log(&mut stream, format!("Waiting on join cluster {cluster_id}")).await;
+                                    }
+                                }
+                            }
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
+
+                        send_error(&mut stream, format!("Waiting on join cluster {cluster_id} timeout")).await;
+                    }
+                }
+                Command::Cluster(ClusterCommand::Leave) => {
+                    if agent.cluster_id() != ClusterId(0) {
+                        let ts = agent.clock().new_timestamp().get_time().as_u64();
+                        let cluster_id = ClusterId(ts);
+
+                        info_log(&mut stream, format!("setting new cluster id: {cluster_id}")).await;
+
+                        let mut conn = match agent.pool().write_priority().await {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                send_error(&mut stream, e).await;
+                                continue;
+                            }
+                        };
+
+                        let res = block_in_place(|| {
+                            let tx = conn.transaction()?;
+
+                            tx.execute("INSERT OR REPLACE INTO __corro_state (key, value) VALUES ('cluster_id', ?)", [cluster_id])?;
+
+                            let (cb_tx, cb_rx) = oneshot::channel();
+
+                            agent
+                                .tx_foca()
+                                .blocking_send(FocaInput::Cmd(FocaCmd::ChangeIdentity(
+                                    agent.actor(cluster_id),
+                                    cb_tx,
+                                )))
+                                .map_err(|_| ProcessingError::Send)?;
+
+                            cb_rx
+                                .blocking_recv()
+                                .map_err(|_| ProcessingError::CallbackRecv)?
+                                .map_err(|e| ProcessingError::String(e.to_string()))?;
+
+                            tx.commit()?;
+
+                            agent.set_cluster_id(cluster_id);
+
+                            Ok::<_, ProcessingError>(())
+                        });
+
+                        if let Err(e) = res {
+                            send_error(&mut stream, e).await;
+                            continue;
+                        }
+                    }
+
+                    send_success(&mut stream).await;
+                }
                 Command::Cluster(ClusterCommand::Rejoin) => {
                     let (cb_tx, cb_rx) = oneshot::channel();
 
@@ -415,6 +570,18 @@ async fn handle_conn(
                             Err(e) => send_error(&mut stream, e).await,
                         }
                     }
+                    send_success(&mut stream).await;
+                }
+                Command::Cluster(ClusterCommand::GetId) => {
+                    info_log(&mut stream, format!("get cluster id")).await;
+
+                    let cluster_id = agent.cluster_id();
+
+                    let json = json!({
+                        "cluster_id": cluster_id,
+                    });
+
+                    send(&mut stream, Response::Json(json)).await;
                     send_success(&mut stream).await;
                 }
                 Command::Cluster(ClusterCommand::SetId(cluster_id)) => {

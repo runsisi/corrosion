@@ -259,6 +259,16 @@ pub fn runtime_loop(
                             }
                         }
                         FocaInput::Cmd(cmd) => match cmd {
+                            FocaCmd::Join(actor, callback) => {
+                                info!("handling FocaCmd::Join: {actor:?}");
+                                let r = foca.announce(actor, &mut runtime);
+                                if let Err(e) = &r {
+                                    error!("foca join error: {e}");
+                                }
+                                if callback.send(r).is_err() {
+                                    warn!("could not send back result after join");
+                                }
+                            }
                             FocaCmd::Rejoin(callback) => {
                                 let renewed = foca.identity().renew().unwrap();
                                 debug!("handling FocaInput::Rejoin {renewed:?}");
