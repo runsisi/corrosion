@@ -2,7 +2,7 @@ use std::{
     fmt::Display,
     time::{Duration, Instant},
 };
-
+use std::net::SocketAddr;
 use camino::Utf8PathBuf;
 use corro_types::{
     actor::{ActorId, ClusterId},
@@ -106,6 +106,7 @@ pub enum SyncCommand {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClusterCommand {
+    Announce(SocketAddr),
     Rejoin,
     Members,
     MembershipStates,
@@ -348,6 +349,27 @@ async fn handle_conn(
                         Ok(json) => send(&mut stream, Response::Json(json)).await,
                         Err(e) => send_error(&mut stream, e).await,
                     }
+                    send_success(&mut stream).await;
+                }
+                Command::Cluster(ClusterCommand::Announce(addr)) => {
+                    let (cb_tx, cb_rx) = oneshot::channel();
+
+                    if let Err(e) = agent
+                        .tx_foca()
+                        .send(FocaInput::Cmd(FocaCmd::Announce(addr.into(), cb_tx)))
+                        .await
+                    {
+                        send_error(&mut stream, e).await;
+                        continue;
+                    }
+
+                    if let Err(e) = cb_rx.await {
+                        send_error(&mut stream, e).await;
+                        continue;
+                    }
+
+                    info_log(&mut stream, "Announced to join cluster").await;
+
                     send_success(&mut stream).await;
                 }
                 Command::Cluster(ClusterCommand::Rejoin) => {
