@@ -962,20 +962,21 @@ pub async fn process_multiple_changes(
         }
 
         if let Some(ts) = last_cleared {
-            let mut snap = {
+            let mut booked = {
                 agent
                     .booked()
                     .blocking_write("process_multiple_changes(update_cleared_ts snapshot)")
-                    .snapshot()
             };
 
-
+            let mut snap = booked.snapshot();
             snap.update_cleared_ts(&tx, ts)
                 .map_err(|source| ChangeError::Rusqlite {
                     source,
                     actor_id: None,
                     version: None,
                 })?;
+
+            booked.commit_snapshot(snap);
         }
 
         tx.commit().map_err(|source| ChangeError::Rusqlite {
