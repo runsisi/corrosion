@@ -1,3 +1,6 @@
 [submodule "foca"]
 	path = foca
 	url = https://github.com/caio/foca.git
+[submodule "uhlc"]
+	path = uhlc
+	url = git@github.com:atolab/uhlc-rs.git

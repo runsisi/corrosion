@@ -85,6 +85,7 @@ http = { version = "0.2.9" }
 
 [patch.crates-io]
 foca = { path = "foca" }
+uhlc = { path = "uhlc" }
 quinn-proto = { git = "https://github.com/jeromegn/quinn", rev = "108f25a6" }
 
 [profile.release]
