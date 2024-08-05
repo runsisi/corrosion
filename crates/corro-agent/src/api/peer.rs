@@ -781,6 +781,7 @@ fn send_change_chunks<I: Iterator<Item = rusqlite::Result<Change>>>(
                 if changes.is_empty() && *seqs.start() == CrsqlSeq(0) && *seqs.end() == last_seq {
                     return Ok(Some(version));
                 } else {
+                    warn!("--- send change chunk ts: {ts}");
                     sender.blocking_send(SyncMessage::V1(SyncMessageV1::Changeset(ChangeV1 {
                         actor_id,
                         changeset: Changeset::Full {
@@ -1082,11 +1083,14 @@ pub async fn parallel_sync(
 
                     trace!(%actor_id, self_actor_id = %agent.actor_id(), "sent start payload");
 
+                    let ts = agent.clock().new_timestamp();
+                    warn!("--- send ts: {ts}");
+
                     encode_write_sync_msg(
                         &mut codec,
                         &mut encode_buf,
                         &mut send_buf,
-                        SyncMessage::V1(SyncMessageV1::Clock(agent.clock().new_timestamp().into())),
+                        SyncMessage::V1(SyncMessageV1::Clock(ts.into())),
                         &mut tx,
                     ).instrument(info_span!("write_sync_clock"))
                     .await?;
@@ -1109,6 +1113,7 @@ pub async fn parallel_sync(
                     match timeout(Duration::from_secs(2), read_sync_msg(&mut read)).instrument(info_span!("read_sync_clock")).await.map_err(SyncRecvError::from)??  {
                         Some(SyncMessage::V1(SyncMessageV1::Clock(ts))) => match actor_id.try_into() {
                             Ok(id) => {
+                                warn!("--- received ts: {ts}");
                                 if let Err(e) = agent
                                     .clock()
                                     .update_with_timestamp(&uhlc::Timestamp::new(ts.to_ntp64(), id))

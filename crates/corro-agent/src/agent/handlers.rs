@@ -857,7 +857,14 @@ pub async fn handle_changes(
 
         let recv_lag = change
             .ts()
-            .map(|ts| (agent.clock().new_timestamp().get_time() - ts.0).to_duration());
+            .map(|ts| {
+                let now = agent.clock().new_timestamp();
+                info!("-----------------------------------------------------------");
+                info!("now: {now}");
+                info!("msg: {ts}");
+                info!("-----------------------------------------------------------");
+                (now.get_time() - ts.0).to_duration()
+            });
 
         if matches!(src, ChangeSource::Broadcast) {
             counter!("corro.broadcast.recv.count", "kind" => "change").increment(1);
