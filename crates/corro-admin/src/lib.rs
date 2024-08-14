@@ -106,7 +106,8 @@ pub enum SyncCommand {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClusterCommand {
-    Announce(SocketAddr),
+    Join(SocketAddr),
+    Leave,
     Rejoin,
     Members,
     MembershipStates,
@@ -351,12 +352,12 @@ async fn handle_conn(
                     }
                     send_success(&mut stream).await;
                 }
-                Command::Cluster(ClusterCommand::Announce(addr)) => {
+                Command::Cluster(ClusterCommand::Join(addr)) => {
                     let (cb_tx, cb_rx) = oneshot::channel();
 
                     if let Err(e) = agent
                         .tx_foca()
-                        .send(FocaInput::Cmd(FocaCmd::Announce(addr.into(), cb_tx)))
+                        .send(FocaInput::Cmd(FocaCmd::Join(addr.into(), cb_tx)))
                         .await
                     {
                         send_error(&mut stream, e).await;
@@ -369,6 +370,27 @@ async fn handle_conn(
                     }
 
                     info_log(&mut stream, "Announced to join cluster").await;
+
+                    send_success(&mut stream).await;
+                }
+                Command::Cluster(ClusterCommand::Leave) => {
+                    let (cb_tx, cb_rx) = oneshot::channel();
+
+                    if let Err(e) = agent
+                        .tx_foca()
+                        .send(FocaInput::Cmd(FocaCmd::Leave(cb_tx)))
+                        .await
+                    {
+                        send_error(&mut stream, e).await;
+                        continue;
+                    }
+
+                    if let Err(e) = cb_rx.await {
+                        send_error(&mut stream, e).await;
+                        continue;
+                    }
+
+                    info_log(&mut stream, "Leaved cluster").await;
 
                     send_success(&mut stream).await;
                 }

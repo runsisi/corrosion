@@ -5,7 +5,7 @@ use futures::{SinkExt, TryStreamExt};
 use tokio::net::UnixStream;
 use tokio_serde::{formats::Json, Framed};
 use tokio_util::codec::LengthDelimitedCodec;
-use tracing::{info, error, event};
+use tracing::{error, event};
 
 type FramedStream = Framed<
     tokio_util::codec::Framed<UnixStream, LengthDelimitedCodec>,
