@@ -12,6 +12,7 @@ use std::{
 
 use bincode::DefaultOptions;
 use bytes::{BufMut, Bytes, BytesMut};
+use eyre;
 use foca::{BincodeCodec, Foca, Identity, NoCustomBroadcast, Notification, Timer};
 use futures::{
     stream::{FusedStream, FuturesUnordered},
@@ -259,15 +260,66 @@ pub fn runtime_loop(
                             }
                         }
                         FocaInput::Cmd(cmd) => match cmd {
-                            FocaCmd::Announce(actor, callback) => {
-                                info!("handling FocaCmd::Announce");
-                                info!("announcing actor: {actor:?}");
+                            FocaCmd::Join(actor, callback) => {
+                                info!("handling FocaCmd::Join: {actor:?}");
                                 let r = foca.announce(actor, &mut runtime);
                                 if let Err(e) = &r {
-                                    error!("foca announce error: {e}");
+                                    error!("foca join error: {e}");
                                 }
                                 if callback.send(r).is_err() {
-                                    warn!("could not send back result after announce");
+                                    warn!("could not send back result after join");
+                                }
+                            }
+                            FocaCmd::Leave(callback) => {
+                                let handle = async {
+                                    let r = foca.leave_cluster(&mut runtime);
+                                    if let Err(e) = r {
+                                        error!("foca leave error: {e}");
+                                        return Err(eyre::Error::new(e));
+                                    }
+
+                                    agent.members().write().remove_all_members();
+
+                                    let pool = agent.pool().clone();
+                                    let handle = tokio::spawn(async move {
+                                        let mut conn = match pool.write_priority().await {
+                                            Ok(conn) => conn,
+                                            Err(e) => {
+                                                error!("could not acquire a r/w conn to delete __corro_members: {e}");
+                                                return Err(eyre::Error::new(e));
+                                            }
+                                        };
+
+                                        let res = block_in_place(|| {
+                                            let tx = conn.immediate_transaction()?;
+
+                                            tx.execute(
+                                                "DELETE FROM __corro_members;",
+                                                (),
+                                            )?;
+
+                                            tx.commit()?;
+
+                                            Ok(())
+                                        });
+
+                                        if let Err(e) = res {
+                                            error!("could not delete __corro_members: {e}");
+                                            return Err(e);
+                                        }
+
+                                        Ok::<_, eyre::Error>(())
+                                    });
+                                    if let Err(e) = handle.await {
+                                        error!("could not await task to delete __corro_members: {e}");
+                                    }
+                                    Ok(())
+                                };
+
+                                info!("handling FocaCmd::Leave");
+                                let r = handle.await;
+                                if callback.send(r).is_err() {
+                                    warn!("could not send back result after leave");
                                 }
                             }
                             FocaCmd::Rejoin(callback) => {
