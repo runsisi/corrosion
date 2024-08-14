@@ -2,6 +2,7 @@ use std::{cmp, fmt, io, num::NonZeroU32, ops::{Deref, RangeInclusive}, time::Dur
 
 use bytes::{Bytes, BytesMut};
 use corro_api_types::{row_to_change, Change};
+use eyre;
 use foca::{Identity, Member, Notification, Runtime, Timer};
 use itertools::Itertools;
 use metrics::counter;
@@ -72,7 +73,8 @@ pub enum FocaInput {
 
 #[derive(Debug)]
 pub enum FocaCmd {
-    Announce(Actor, oneshot::Sender<Result<(), foca::Error>>),
+    Join(Actor, oneshot::Sender<Result<(), foca::Error>>),
+    Leave(oneshot::Sender<Result<(), eyre::Error>>),
     Rejoin(oneshot::Sender<Result<(), foca::Error>>),
     MembershipStates(mpsc::Sender<foca::Member<Actor>>),
     ChangeIdentity(Actor, oneshot::Sender<Result<(), foca::Error>>),

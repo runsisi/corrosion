@@ -137,6 +137,11 @@ impl Members {
         effectively_down
     }
 
+    pub fn remove_all_members(&mut self) {
+        self.by_addr.clear();
+        self.states.clear();
+    }
+
     pub fn add_rtt(&mut self, addr: SocketAddr, rtt: Duration) {
         self.rtts
             .entry(addr)
