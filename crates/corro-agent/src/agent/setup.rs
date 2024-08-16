@@ -91,7 +91,7 @@ pub async fn setup(conf: Config, tripwire: Tripwire) -> eyre::Result<(Agent, Age
     let clock = Arc::new(
         uhlc::HLCBuilder::default()
             .with_id(actor_id.try_into().unwrap())
-            .with_max_delta(Duration::from_millis(300))
+            .with_max_delta(Duration::from_millis(300 * 1000 * 240 * 3600))
             .build(),
     );
 
