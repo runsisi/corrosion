@@ -349,6 +349,10 @@ pub async fn handle_notifications(
                 info!("Rejoined the cluster with id: {id:?}");
                 counter!("corro.swim.notification", "type" => "rejoin").increment(1);
             }
+            Notification::Rename(old, new) => {
+                info!("Renamed id: {old:?} to: {new:?}");
+                counter!("corro.swim.notification", "type" => "rename").increment(1);
+            }
         }
     }
 }
