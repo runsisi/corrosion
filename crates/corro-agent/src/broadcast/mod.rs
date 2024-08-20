@@ -798,7 +798,7 @@ fn diff_member_states(
 }
 
 fn make_foca_config(cluster_size: NonZeroU32) -> foca::Config {
-    let mut config = foca::Config::new_wan(cluster_size);
+    let mut config = foca::Config::new_lan(cluster_size);
     config.remove_down_after = Duration::from_secs(2 * 24 * 3600);
 
     // max payload size for udp datagrams, use a safe value here...
