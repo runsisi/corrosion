@@ -59,6 +59,9 @@ async fn insert_rows_and_gossip() -> eyre::Result<()> {
     )
     .await?;
 
+    // sleep to update rtt, otherwise `broadcast_to` in runtime_loop will ignore ring0 members
+    sleep(Duration::from_secs(2)).await;
+
     let client = hyper::Client::builder()
         .pool_max_idle_per_host(5)
         .pool_idle_timeout(Duration::from_secs(300))
