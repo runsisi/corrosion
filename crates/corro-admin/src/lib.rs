@@ -374,6 +374,55 @@ async fn handle_conn(
                     send_success(&mut stream).await;
                 }
                 Command::Cluster(ClusterCommand::Leave) => {
+                    // change cluster id so we are to be excluded
+                    {
+                        let ts = agent.clock().new_timestamp().get_time().as_u64();
+                        let cluster_id = ClusterId(ts);
+
+                        info_log(&mut stream, format!("setting new cluster id: {cluster_id}")).await;
+
+                        let mut conn = match agent.pool().write_priority().await {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                send_error(&mut stream, e).await;
+                                continue;
+                            }
+                        };
+
+                        let res = block_in_place(|| {
+                            let tx = conn.transaction()?;
+
+                            tx.execute("INSERT OR REPLACE INTO __corro_state (key, value) VALUES ('cluster_id', ?)", [cluster_id])?;
+
+                            let (cb_tx, cb_rx) = oneshot::channel();
+
+                            agent
+                                .tx_foca()
+                                .blocking_send(FocaInput::Cmd(FocaCmd::ChangeIdentity(
+                                    agent.actor(cluster_id),
+                                    cb_tx,
+                                )))
+                                .map_err(|_| ProcessingError::Send)?;
+
+                            cb_rx
+                                .blocking_recv()
+                                .map_err(|_| ProcessingError::CallbackRecv)?
+                                .map_err(|e| ProcessingError::String(e.to_string()))?;
+
+                            tx.commit()?;
+
+                            agent.set_cluster_id(cluster_id);
+
+                            Ok::<_, ProcessingError>(())
+                        });
+
+                        if let Err(e) = res {
+                            send_error(&mut stream, e).await;
+                            continue;
+                        }
+                    }
+
+                    // tell foca to leave cluster
                     let (cb_tx, cb_rx) = oneshot::channel();
 
                     if let Err(e) = agent
