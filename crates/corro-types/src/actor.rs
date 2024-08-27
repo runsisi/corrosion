@@ -219,7 +219,7 @@ fn duration_since_epoch() -> Duration {
     Debug, Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize,
 )]
 #[serde(transparent)]
-pub struct ClusterId(pub u16);
+pub struct ClusterId(pub u64);
 
 impl fmt::Display for ClusterId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -233,7 +233,7 @@ where
 {
     #[inline]
     fn read_from<R: Reader<'a, C>>(reader: &mut R) -> Result<Self, C::Error> {
-        Ok(ClusterId(u16::read_from(reader)?))
+        Ok(ClusterId(u64::read_from(reader)?))
     }
 
     #[inline]

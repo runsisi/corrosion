@@ -699,7 +699,7 @@ enum ClusterCommand {
     /// Dumps the current member SWIM states
     MembershipStates,
     /// Set a new cluster ID for the node
-    SetId { cluster_id: u16 },
+    SetId { cluster_id: u64 },
 }
 
 #[derive(Subcommand)]
