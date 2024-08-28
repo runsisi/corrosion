@@ -2377,6 +2377,7 @@ mod tests {
         let gossip_config = GossipConfig {
             bind_addr: "127.0.0.1:0".parse()?,
             client_addr: DEFAULT_GOSSIP_CLIENT_ADDR,
+            external_interface: None,
             external_addr: None,
             bootstrap: vec![],
             tls: Some(TlsConfig {

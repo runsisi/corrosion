@@ -19,6 +19,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 hyper = { workspace = true }
 itertools = { workspace = true }
+local-ip-address = { workspace = true }
 metrics = { workspace = true }
 opentelemetry = { workspace = true }
 parking_lot = { workspace = true }

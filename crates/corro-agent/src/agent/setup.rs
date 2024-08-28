@@ -135,7 +135,43 @@ pub async fn setup(conf: Config, tripwire: Tripwire) -> eyre::Result<(Agent, Age
     let gossip_server_endpoint = gossip_server_endpoint(&conf.gossip).await?;
     let gossip_addr = gossip_server_endpoint.local_addr()?;
 
-    let external_addr = conf.gossip.external_addr;
+    let external_interface = conf.gossip.external_interface.clone();
+
+    let external_addr = conf.gossip.external_addr.or_else(|| -> Option<SocketAddr> {
+        use std::net::{IpAddr, Ipv4Addr};
+        use local_ip_address::list_afinet_netifas;
+
+        if let Some(bind_iface) = external_interface {
+            let ifaces = list_afinet_netifas().ok()?.into_iter()
+                .filter_map(|(iface, ipaddr)| match ipaddr {
+                    IpAddr::V4(addr) => Some((iface, addr)),
+                    _ => None,
+                })
+                .collect::<Vec<(String, Ipv4Addr)>>();
+
+            let ip_v4_addrs = ifaces.iter()
+                .filter_map(|(iface, addr)| {
+                    if *iface == bind_iface {
+                        Some(addr.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<Ipv4Addr>>();
+
+            if ip_v4_addrs.len() > 0 {
+                return Some(SocketAddr::new(IpAddr::from(ip_v4_addrs[0]), gossip_addr.port()))
+            }
+        }
+
+        None
+    });
+
+    info!("external addr: {external_addr:?}");
+
+    if gossip_addr.ip().is_unspecified() && (external_addr.is_none() || external_addr.unwrap().ip().is_unspecified()) {
+        eyre::bail!("no valid external addr specified");
+    }
 
     // RTT handling interacts with the tokio ReceiverStream and as
     // such needs a raw tokio channel
