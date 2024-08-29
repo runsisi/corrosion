@@ -9,7 +9,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-
+use std::num::NonZeroU8;
 use bincode::DefaultOptions;
 use bytes::{BufMut, Bytes, BytesMut};
 use foca::{BincodeCodec, Foca, Identity, NoCustomBroadcast, Notification, Timer};
@@ -736,6 +736,7 @@ fn diff_member_states(
 
 fn make_foca_config(cluster_size: NonZeroU32) -> foca::Config {
     let mut config = foca::Config::new_lan(cluster_size);
+    config.max_transmissions = NonZeroU8::new(5).unwrap();
     config.remove_down_after = Duration::from_secs(2 * 24 * 3600);
 
     // max payload size for udp datagrams, use a safe value here...
