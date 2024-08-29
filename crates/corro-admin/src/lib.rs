@@ -422,7 +422,7 @@ async fn handle_conn(
                 }
                 Command::Cluster(ClusterCommand::Leave) => {
                     // change cluster id so we are to be excluded
-                    {
+                    if agent.cluster_id() == ClusterId(0) {
                         let ts = agent.clock().new_timestamp().get_time().as_u64();
                         let cluster_id = ClusterId(ts);
 
@@ -468,25 +468,6 @@ async fn handle_conn(
                             continue;
                         }
                     }
-
-                    // tell foca to leave cluster
-                    let (cb_tx, cb_rx) = oneshot::channel();
-
-                    if let Err(e) = agent
-                        .tx_foca()
-                        .send(FocaInput::Cmd(FocaCmd::Leave(cb_tx)))
-                        .await
-                    {
-                        send_error(&mut stream, e).await;
-                        continue;
-                    }
-
-                    if let Err(e) = cb_rx.await {
-                        send_error(&mut stream, e).await;
-                        continue;
-                    }
-
-                    info_log(&mut stream, "Leaved cluster").await;
 
                     send_success(&mut stream).await;
                 }
