@@ -50,7 +50,8 @@ impl AdminConn {
                     },
                     Response::Error { msg } => {
                         error!("{msg}");
-                        break;
+                        // break;
+                        return Err(eyre::eyre!(msg));
                     }
                     Response::Success => {
                         break;
