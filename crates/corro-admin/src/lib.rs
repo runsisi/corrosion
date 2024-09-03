@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use camino::Utf8PathBuf;
 use corro_types::{
     actor::{ActorId, ClusterId},
-    agent::{Agent, BookedVersions, Bookie, LockKind, LockMeta, LockState},
+    agent::{Agent, BookedVersions, Bookie, LockKind, LockMeta, LockState, FocaState},
     base::{CrsqlDbVersion, CrsqlSeq, Version},
     broadcast::{FocaCmd, FocaInput, Timestamp},
     sqlite::SqlitePoolError,
@@ -418,7 +418,27 @@ async fn handle_conn(
 
                     info_log(&mut stream, "Announced to join cluster").await;
 
-                    send_success(&mut stream).await;
+                    let mut rounds = 0;
+
+                    // wait for 30 * 100ms = 3s
+                    for _ in 0..30 {
+                        match agent.foca_state() {
+                            FocaState::Active => {
+                                info!("Joined cluster successfully!");
+                                send_success(&mut stream).await;
+                                break;
+                            }
+                            _ => {
+                                rounds += 1;
+                                if rounds % 10 == 0 {
+                                    info!("Waiting on join cluster")
+                                }
+                            }
+                        }
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+
+                    send_error(&mut stream, "Waiting on join cluster timeout").await;
                 }
                 Command::Cluster(ClusterCommand::Leave) => {
                     // change cluster id so we are to be excluded
