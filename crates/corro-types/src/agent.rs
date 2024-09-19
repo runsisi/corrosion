@@ -98,6 +98,7 @@ pub struct AgentInner {
     write_sema: Arc<Semaphore>,
     schema: RwLock<Schema>,
     cluster_id: ArcSwap<ClusterId>,
+    foca_state: ArcSwap<FocaState>,
     limits: Limits,
     subs_manager: SubsManager,
 }
@@ -128,6 +129,7 @@ impl Agent {
             write_sema: config.write_sema,
             schema: config.schema,
             cluster_id: ArcSwap::from_pointee(config.cluster_id),
+            foca_state: ArcSwap::from_pointee(FocaState::Idle),
             limits: Limits {
                 sync: Arc::new(Semaphore::new(3)),
             },
@@ -243,6 +245,14 @@ impl Agent {
 
     pub fn cluster_id(&self) -> ClusterId {
         *self.0.cluster_id.load().as_ref()
+    }
+
+    pub fn set_foca_state(&self, state: FocaState) {
+        self.0.foca_state.store(Arc::new(state));
+    }
+
+    pub fn foca_state(&self) -> FocaState {
+        *self.0.foca_state.load().as_ref()
     }
 }
 
@@ -495,6 +505,13 @@ fn init_migration(tx: &Transaction) -> rusqlite::Result<()> {
     )?;
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FocaState {
+    Idle,
+    Active,
+    Defunct,
 }
 
 #[derive(Debug, Clone)]

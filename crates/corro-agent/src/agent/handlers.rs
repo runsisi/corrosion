@@ -30,7 +30,7 @@ use corro_types::{
 };
 
 use bytes::Bytes;
-use corro_types::agent::ChangeError;
+use corro_types::agent::{ChangeError, FocaState};
 use corro_types::base::Version;
 use corro_types::broadcast::Timestamp;
 use corro_types::change::store_empty_changeset;
@@ -353,15 +353,18 @@ pub async fn handle_notifications(
             }
             Notification::Active => {
                 info!("Current node is considered ACTIVE");
+                agent.set_foca_state(FocaState::Active);
                 counter!("corro.swim.notification", "type" => "active").increment(1);
             }
             Notification::Idle => {
                 warn!("Current node is considered IDLE");
+                agent.set_foca_state(FocaState::Idle);
                 counter!("corro.swim.notification", "type" => "idle").increment(1);
             }
             // this happens when we leave the cluster
             Notification::Defunct => {
                 debug!("Current node is considered DEFUNCT");
+                agent.set_foca_state(FocaState::Defunct);
                 counter!("corro.swim.notification", "type" => "defunct").increment(1);
             }
             Notification::Rejoin(id) => {
