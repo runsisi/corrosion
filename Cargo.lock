@@ -808,12 +808,15 @@ name = "corro-api-types"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
+ "axum",
  "camino",
  "compact_str 0.7.0",
  "corro-base-types",
  "corro-speedy",
  "deadpool",
+ "eyre",
  "hex",
+ "hyper",
  "rusqlite",
  "serde",
  "serde_json",
@@ -1053,6 +1056,7 @@ dependencies = [
  "shellwords",
  "spawn",
  "sqlite3-restore",
+ "stable-eyre",
  "tempfile",
  "thiserror",
  "tikv-jemallocator",
@@ -3848,6 +3852,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743b4dc2cbde11890ccb254a8fc9d537fa41b36da00de2a1c5e9848c9bc42bd7"
 dependencies = [
  "log",
+]
+
+[[package]]
+name = "stable-eyre"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "556fec8c2da34c70b75f16d88df8a8cd7e652e567ff097b7e9df0022c8695cc4"
+dependencies = [
+ "backtrace",
+ "eyre",
+ "indenter",
 ]
 
 [[package]]

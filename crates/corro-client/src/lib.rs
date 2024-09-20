@@ -1,6 +1,7 @@
 pub mod sub;
 
 use corro_api_types::{ChangeId, ExecResponse, ExecResult, SqliteValue, Statement};
+use corro_api_types::{AdminError, AdminRequest, AdminResponse};
 use http::uri::PathAndQuery;
 use hyper::{client::HttpConnector, http::HeaderName, Body, StatusCode};
 use serde::de::DeserializeOwned;
@@ -46,6 +47,37 @@ impl CorrosionApiClient {
                 .http2_keep_alive_timeout(HTTP2_KEEP_ALIVE_INTERVAL / 2)
                 .build(connector),
         }
+    }
+
+    pub async fn admin(&self, req: &AdminRequest) -> Result<AdminResponse, Error> {
+        let req = hyper::Request::builder()
+            .method(hyper::Method::POST)
+            .uri(format!("http://{}/v1/admin", &self.api_addr))
+            .header(hyper::header::CONTENT_TYPE, "application/json")
+            .header(hyper::header::ACCEPT, "application/json")
+            .body(Body::from(serde_json::to_vec(req)?))?;
+
+        let res = self.api_client.request(req).await?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+            return match hyper::body::to_bytes(res.into_body()).await {
+                Ok(b) => match serde_json::from_slice::<AdminError>(&b) {
+                    Ok(err) => {
+                        Err(err.into())
+                    },
+                    Err(_) => {
+                        Err(Error::UnexpectedStatusCode(status))
+                    }
+                },
+                Err(_) => {
+                    Err(Error::UnexpectedStatusCode(status))
+                }
+            }
+        }
+
+        let b = hyper::body::to_bytes(res.into_body()).await?;
+        Ok(serde_json::from_slice(&b)?)
     }
 
     pub async fn query_typed<T: DeserializeOwned + Unpin>(
@@ -652,6 +684,9 @@ pub enum Error {
     Http(#[from] hyper::http::Error),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    AdminError(#[from] AdminError),
 
     #[error("received unexpected response code: {0}")]
     UnexpectedStatusCode(StatusCode),

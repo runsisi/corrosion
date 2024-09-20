@@ -3,3 +3,4 @@ pub mod consul;
 pub mod reload;
 pub mod tls;
 pub mod tpl;
+pub mod admin;

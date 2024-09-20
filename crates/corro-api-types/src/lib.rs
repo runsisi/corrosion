@@ -6,8 +6,10 @@ use std::{
     ops::{AddAssign, Deref},
 };
 
+use axum::response::{IntoResponse, Response, Json};
 use compact_str::CompactString;
 use corro_base_types::{CrsqlDbVersion, CrsqlSeq, Version};
+use hyper::http::StatusCode;
 use rusqlite::{
     types::{FromSql, FromSqlError, ToSqlOutput, Value, ValueRef},
     Row, ToSql,
@@ -17,6 +19,7 @@ use serde_json::value::RawValue;
 use smallvec::{SmallVec, ToSmallVec};
 use speedy::{Context, Readable, Reader, Writable, Writer};
 use sqlite::ChangeType;
+use thiserror;
 
 pub mod sqlite;
 
@@ -173,6 +176,47 @@ impl std::ops::Add<Self> for ChangeId {
 
     fn add(self, rhs: Self) -> Self::Output {
         ChangeId(self.0 + rhs.0)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum AdminRequest {
+    Join { cluster_id: u64, addr: String },
+    Leave,
+    GetId,
+    SetId { cluster_id: u64 },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum AdminResponse {
+    Success,
+    ClusterId { cluster_id: u64 },
+}
+
+impl IntoResponse for AdminResponse {
+    fn into_response(self) -> Response {
+        (StatusCode::OK, Json(self)).into_response()
+    }
+}
+
+#[derive(Debug, thiserror::Error, Serialize, Deserialize)]
+pub enum AdminError {
+    #[error("error: {0}")]
+    Internal(String),
+    #[error("join timeout")]
+    JoinTimeout,
+}
+
+impl IntoResponse for AdminError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
+    }
+}
+
+impl From<eyre::Error> for AdminError {
+    fn from(err: eyre::Error) -> AdminError {
+        AdminError::Internal(format!("{:?}", err))
     }
 }
 

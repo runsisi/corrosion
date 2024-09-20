@@ -12,6 +12,7 @@ use command::{
     tpl::TemplateFlags,
 };
 use corro_api_types::SqliteParam;
+use corro_api_types::{AdminRequest, AdminResponse};
 use corro_client::CorrosionApiClient;
 use corro_types::{
     actor::{ActorId, ClusterId},
@@ -32,6 +33,7 @@ use opentelemetry::{
 };
 use opentelemetry_otlp::WithExportConfig;
 use rusqlite::{Connection, OptionalExtension};
+use stable_eyre;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{
     fmt::format::Format, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
@@ -147,10 +149,42 @@ fn init_tracing(cli: &Cli) -> Result<(), ConfigError> {
 }
 
 async fn process_cli(cli: Cli) -> eyre::Result<()> {
+    stable_eyre::HookBuilder::default().capture_backtrace_by_default(true).install()?;
+
     init_tracing(&cli)?;
 
     match &cli.command {
         Command::Agent => command::agent::run(cli.config()?, &cli.config_path).await?,
+
+        Command::Admin(AdminCommand::Join { cluster_id, addr }) => {
+            let c = cli.api_client()?;
+            let req = AdminRequest::Join {cluster_id: *cluster_id, addr: addr.clone()};
+            c.admin(&req).await?;
+        }
+        Command::Admin(AdminCommand::Leave) => {
+            let c = cli.api_client()?;
+            let req = AdminRequest::Leave;
+            c.admin(&req).await?;
+        }
+        Command::Admin(AdminCommand::GetId) => {
+            let c = cli.api_client()?;
+            let req = AdminRequest::GetId;
+            match c.admin(&req).await? {
+                AdminResponse::ClusterId {cluster_id} => {
+                    println!("{:#}", serde_json::json!({
+                        "cluster_id": cluster_id,
+                    }));
+                }
+                r => {
+                    panic!("{}", format!("unexpected response: {:?}", r));
+                }
+            }
+        }
+        Command::Admin(AdminCommand::SetId { cluster_id }) => {
+            let c = cli.api_client()?;
+            let req = AdminRequest::SetId {cluster_id: *cluster_id};
+            c.admin(&req).await?;
+        }
 
         Command::Backup { path } => {
             let db_path = cli.db_path()?;
@@ -635,6 +669,10 @@ enum Command {
     /// Launches the agent
     Agent,
 
+    /// Administration via HTTP
+    #[command(subcommand)]
+    Admin(AdminCommand),
+
     /// Backup the Corrosion DB
     Backup {
         path: String,
@@ -706,6 +744,18 @@ enum Command {
     /// DB-related commands
     #[command(subcommand)]
     Db(DbCommand),
+}
+
+#[derive(Subcommand)]
+enum AdminCommand {
+    /// Join cluster
+    Join { cluster_id: u64, addr: String },
+    /// Leave cluster
+    Leave,
+    /// Get cluster ID for the node
+    GetId,
+    /// Set a new cluster ID for the node
+    SetId { cluster_id: u64 },
 }
 
 #[derive(Subcommand)]
