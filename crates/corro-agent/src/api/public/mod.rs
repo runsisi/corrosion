@@ -32,6 +32,7 @@ use tracing::{debug, error, info, trace};
 use corro_types::broadcast::broadcast_changes;
 
 pub mod pubsub;
+pub mod admin;
 
 pub async fn make_broadcastable_changes<F, T>(
     agent: &Agent,
